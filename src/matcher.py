@@ -66,3 +66,42 @@ def resolve(event_id: str, kalshi_id: str, *, http: httpx.Client | None = None) 
 def tradeable(pair: Pair, *, require_same: bool = True) -> bool:
     """Whether the two listings settle alike enough for YES + NO to pay $1."""
     return pair.rules == "same" or (not require_same and pair.rules == "insufficient")
+
+
+@dataclass(frozen=True)
+class RuleAudit:
+    """Structured audit result explaining why a pair is accepted or rejected."""
+    accepted: bool
+    verdict: str
+    reason: str
+
+
+def verify_rule_compatibility(
+    pair: Pair,
+    *,
+    require_same: bool = True,
+) -> RuleAudit:
+    """Verify settlement rules for a cross-venue pair with an explicit audit reason."""
+    if pair.rules == "same":
+        return RuleAudit(
+            accepted=True,
+            verdict="same",
+            reason=pair.rules_reason or "Settlement source, cutoff, and outcome polarity verified identical.",
+        )
+    if pair.rules == "insufficient" and not require_same:
+        return RuleAudit(
+            accepted=True,
+            verdict="insufficient",
+            reason=pair.rules_reason or "Accepted under relaxed rule policy (require_same=False).",
+        )
+    if pair.rules == "not_same":
+        return RuleAudit(
+            accepted=False,
+            verdict="not_same",
+            reason=pair.rules_reason or "Rejected: settlement criteria differ across venues (basis/oracle risk).",
+        )
+    return RuleAudit(
+        accepted=False,
+        verdict=pair.rules,
+        reason=pair.rules_reason or f"Rejected: rule state '{pair.rules}' does not satisfy require_same={require_same}.",
+    )

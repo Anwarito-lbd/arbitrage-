@@ -26,7 +26,10 @@ async def run(markets: list[dict]) -> None:
     bot = ArbitrageBot({**CONFIG, "markets": markets})
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, bot.stop)
+        try:
+            loop.add_signal_handler(sig, bot.stop)
+        except NotImplementedError:
+            signal.signal(sig, lambda *_: loop.call_soon_threadsafe(bot.stop))
     await bot.start()
     print("\n[STOPPED]")
 
