@@ -1,245 +1,166 @@
-# Prediction Market Arbitrage Trading Bot
+# ArbitrageX — Quantitative Cross-Venue Prediction Market Arbitrage Platform
 
-[![Powered by Synpath](https://img.shields.io/badge/Powered%20by-Synpath-7c3aed?style=for-the-badge)](https://www.synpath.dev)
-[![Synpath on GitHub](https://img.shields.io/badge/GitHub-Synpath--ai%2Fsynpath-181717?style=for-the-badge&logo=github)](https://github.com/Synpath-ai/synpath)
-![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+[![License: MIT](https://img.shields.io/badge/License-MIT-00f090.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-38bdf8.svg)](requirements.txt)
+[![Tests: 28 Passing](https://img.shields.io/badge/pytest-28%20passed-00f090.svg)](docs/PROOF_OF_WORK.md)
+[![Mode: Simulated Paper Replay](https://img.shields.io/badge/Execution-Simulated%20Paper%20Replay-f59e0b.svg)](#deterministic-100000-simulated-paper-account-replay)
 
-An open-source arbitrage strategy for **Kalshi** and **Polymarket**: it finds arbitrage opportunities, runs the strategy on live prices as paper trading, and backtests it on history. No orders are placed.
+**ArbitrageX** is a quantitative cross-venue prediction market arbitrage research engine, multi-level L2 order-book slippage simulator, `$1,000.00` paper-account replay framework, and FastAPI/WebSocket web terminal operating across **Kalshi** and **Polymarket** binary event contracts.
 
-Powered by [Synpath](https://www.synpath.dev): one API for every prediction market. Kalshi, Polymarket, Polymarket US and Opinion through one open-source Python SDK:
-
-- **Smart order routing** across both order books, at the cheapest price after fees
-- **Advanced order types:** stop-limit, trailing stop, OCO, TWAP and more, on every venue
-- **Cross-venue market matching**, with settlement rules compared
-- **Unified data:** order books, fees, live streams and history
-
-Open source (MIT): **[github.com/Synpath-ai/synpath](https://github.com/Synpath-ai/synpath)** · `pip install synpath`
-
-> [!WARNING]
-> **Not financial advice. For research and educational purposes only.**
-> This project does not place trades and makes no promise of profit. Backtest and paper-trading results are simulated and do not predict real returns. Read the full [Disclaimer](#disclaimer) before using it.
+> **Upstream Attribution (MIT):** Built directly atop the MIT-licensed [`Synpath-ai/prediction-market-arbitrage-trading-bot`](https://github.com/Synpath-ai/prediction-market-arbitrage-trading-bot) pricing core (`src/arbitrage.py`, `src/strategy.py`, `src/discover.py`, `backtest/`, `trading/`). See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md) for full upstream attribution.
+>
+> **Simulation & No-Live-Capital Disclaimer:** All replay performance metrics, equity curves, Sharpe ratios, and trade ledgers documented in this repository come from a **deterministic simulated paper-account replay** (`backtest/paper_replay.py`, `seed=42`) over synthetic L2 order books. **No real money was traded and no live venue orders were submitted.**
 
 ---
 
-## Overview
+## Interactive Terminal Walkthrough
 
-Kalshi and Polymarket often list the same question at different prices. When that happens, buying **YES on one platform** and **NO on the other** can cost less than the $1 the pair always pays out. That difference is the arbitrage profit.
+![ArbitrageX Terminal Walkthrough](docs/proof/walkthrough.gif)
 
+- **Full HD Walkthrough Video:** [`docs/proof/walkthrough.mp4`](docs/proof/walkthrough.mp4) · [`docs/proof/walkthrough.webm`](docs/proof/walkthrough.webm)
+- **Desktop (`1440×900`) & Mobile (`390×844`) Captures:** [`dashboard-desktop.png`](docs/proof/dashboard-desktop.png) · [`dashboard-mobile.png`](docs/proof/dashboard-mobile.png)
+
+---
+
+## System Architecture
+
+```mermaid
+flowchart LR
+    CAT["Pair Catalog & Rule Verifier<br/>src/matcher.py"] -->|"rules == same"| L2["L2 Order Book & Complement Flip<br/>src/orderbook.py"]
+    CAT -->|"rules != same"| REJ["Settlement Risk Gate<br/>Rejected & Audited"]
+    L2 -->|"YES ask + NO ask + VWAP depth"| PR["Cross-Venue Pricer & Fee Engine<br/>src/arbitrage.py"]
+    PR -->|"net_edge >= entry_edge"| PA["$1,000 Simulated Paper Account<br/>trading/paper_account.py"]
+    PA -->|"Early convergence or settlement"| REP["Walk-Forward Replay & Charts<br/>backtest/paper_replay.py"]
+    L2 & PA --> API["FastAPI + WebSocket Stream<br/>server.py"]
+    API --> UI["ArbitrageX Quant Terminal<br/>index.html / app.js / index.css"]
 ```
-Profit per pair = $1.00 − (YES price + NO price) − trading fees
-```
 
-This bot:
+---
 
-- **Matches markets** across both platforms and checks that they settle under the same rules
-- **Detects arbitrage opportunities** from live order books, after fees
-- **Signals entries and exits** and tracks paper positions and P&L at the quoted prices
-- **Backtests** the same strategy on historical prices and charts the results
+## Mathematical Formulation
 
-![Backtest P&L across three markets](assets/backtest-pnl.png)
+### 1. Cross-Venue Binary Arbitrage Boundary
 
-*Example backtest on three markets listed on both Kalshi and Polymarket: 60 days of 1-minute prices (Jul 29 – Sep 27, 2026), 1,000 contracts per leg. **+$1,771.40 total P&L, a +60.4% return** on the $2,934 peak capital tied up at once, across 44 trades, every one closed at a profit.*
+For a binary event contract paying `$1.00` upon `YES` and `$1.00` upon `NO` under **verified identical settlement rules** (`Pair.rules == "same"`), a cross-venue hedged portfolio purchases $C$ `YES` contracts on Venue $A$ and $C$ `NO` contracts on Venue $B$:
 
-## Backtest vs. live trading
+$$\text{Gross Cost}(C) = \text{VWAP}_{\text{YES}}^{(A)}(C) + \text{VWAP}_{\text{NO}}^{(B)}(C)$$
 
-| | Backtest | Live trading |
-|---|---|---|
-| Command | `python -m backtest.backtest` | `python -m trading` |
-| Prices | historical 1-minute bars (`--timeframe 1h` for hourly) | live order books over the venues' WebSockets |
-| Orders | simulated | **paper trading**: no orders are placed |
-| Needs | a Synpath API key | a Synpath API key; a Kalshi API key for Kalshi's WebSocket (optional) |
+Because binary CLOBs quote `YES` depth, buying `NO` on Venue $B$ matches resting `YES` bids at complement price (`L2Book.no_asks`):
 
-**Placing real orders** is done with **[Synpath](https://github.com/Synpath-ai/synpath)**, the library this bot is built on: limit, IOC and FOK orders on Kalshi, Polymarket and Opinion, plus the live fill streams a two-legged trade needs. This bot stops at the signal.
+$$P_{\text{NO}}^{\text{ask}} = 1 - P_{\text{YES}}^{\text{bid}}$$
 
-## How Cross-Platform Arbitrage Works
+An actionable net arbitrage edge exists after venue fees $F_A, F_B$ if and only if:
 
-Polymarket and Kalshi sometimes price the same event differently.
+$$\text{Net Edge per Pair} = 1.00 - \left(\text{VWAP}_{\text{YES}}^{(A)}(C) + \text{VWAP}_{\text{NO}}^{(B)}(C) + \frac{F_A(C) + F_B(C)}{C}\right) \ge \varepsilon_{\text{entry}}$$
 
-The bot looks for cases where it can buy **YES on one platform** and **NO on the other** for a combined cost of less than $1.
+### 2. Venue-Specific Taker Fee Nonlinearity
 
-Because exactly one side will pay $1 at settlement, buying both sides below $1 creates a built-in profit.
+- **Kalshi (`quadratic`, `up_to_cent` rounding):**
+  $$F_{\text{Kalshi}}(C, P) = \frac{\lceil 100 \cdot 0.07 \cdot C \cdot P(1 - P) \rceil}{100}$$
+  Fee drag peaks at implied probability $P = 0.50$ (`$0.0175/contract` before cent rounding), requiring exact integer-lot evaluation rather than asymptotic linear approximations.
+- **Polymarket (`quadratic_theta`):** Standard CTF order-book markets carry `taker_rate = 0.0` (with configurable `quadratic_theta` support via `synpath.FeeSchedule`).
 
-### Simple example
+### 3. L2 VWAP Slippage & Depth Constraint
 
-Suppose:
+Walking cumulative ask tiers $\{(p_i, q_i)\}_{i=1}^{L}$ for order size $C \le \sum_i q_i$:
 
-- YES on Kalshi = **39¢**
-- NO on Polymarket = **55¢**
+$$\text{VWAP}(C) = \frac{1}{C} \sum_{i=1}^{L} \tilde{q}_i p_i, \qquad \text{Slippage per Contract} = \text{VWAP}(C) - p_1$$
 
-Buying both costs **94¢**. After fees, the total cost is about **96.7¢**.
+where $\tilde{q}_i = \min\big(q_i,\; C - \sum_{j < i} \tilde{q}_j\big)$. Orders whose size exceeds fillable L2 depth or whose slippage compresses $\text{Net Edge}$ below $\varepsilon_{\text{entry}}$ are rejected or downsized automatically.
 
-At settlement, one of the two positions will pay **$1**, so the trade locks in roughly **3.3¢ profit per contract pair**. On 1,000 contracts, that's about **$33**.
+### 4. Early Spread Convergence & Risk-Adjusted Metrics
 
-### The bot doesn't always need to wait
+Rather than locking capital until contract maturity, `PaperAccount` (`trading/paper_account.py`) monitors exit bids across both legs (`L2Book.no_bids`) and unwinds whenever round-trip net proceeds clear `take_profit`:
 
-If the price difference disappears before the event settles, the bot can close both positions early and take the profit.
+$$\left(\text{Bid}_{\text{YES}}^{(A)} + \text{Bid}_{\text{NO}}^{(B)} - \frac{F_{\text{exit}}}{C}\right) - \text{Entry Cost per Pair} \ge \text{take\_profit}$$
 
-For example, if the two positions can later be sold for a combined **$1.02**, that's about **2.6¢ profit per pair after fees** (about $26 on 1,000 contracts). The bot exits and frees up the capital for the next opportunity.
+Daily mark-to-market equity $E_d$ yields daily simple returns $r_d = E_d / E_{d-1} - 1$ and annualized Sharpe ratio $\text{Sharpe} = \sqrt{252} \cdot \bar{r}_d / \sigma(r_d)$.
 
-If prices don't converge, it simply holds until settlement and collects the spread it locked in at entry.
+---
 
-### In short
+## Deterministic `$1,000.00` Simulated Paper Account Replay
 
-**Find the same event priced differently → buy both sides for less than $1 → exit when profitable or hold to settlement.**
+Running `python -m backtest.paper_replay` executes a deterministic 60-day (`1,440`-hour, `2026-07-15` to `2026-09-13 UTC`, `seed=42`) simulated L2 walk-forward across **6 cross-venue pairs** (`5` rule-compatible pairs + `1` `not_same` TikTok pair explicitly rejected by `verify_rule_compatibility`), enforcing a `45%` max allocation per position and `4` max simultaneous positions.
 
-The bot automates this process across Polymarket and Kalshi.
+| Simulated Replay Metric | Observed Value |
+| :--- | :--- |
+| **Execution Mode** | **Simulated Paper Account Replay (Zero Live Orders)** |
+| **Initial Capital** | `$1,000.00` |
+| **Final Equity** | `$1,748.05` |
+| **Realized P&L / ROI** | `+$748.05` (`+74.81%`) |
+| **Executed Round-Trips** | `29` (`29 won` / `0 lost` / `100.0%` win rate) |
+| **Exit Breakdown** | `29` early convergence exits · `0` held to resolution |
+| **Daily Annualized Sharpe** | `8.59` |
+| **Max Mark-to-Market Drawdown** | `-5.64%` (`-$82.26`) |
+| **Total Taker Fees Paid** | `$499.21` |
+| **Total L2 Slippage Cost** | `$3.02` |
+| **Average Locked Edge / Pair** | `$0.033` (`3.3¢` per `$1.00` pair) |
+| **Rule-Rejected Pairs** | `1` (`kalshi:TIKTOK-BAN26`, `rules="not_same"`) |
 
-## Arbitrage Strategy
+### Quantitative Proof Charts
 
-Three simple rules:
+| `$1,000` Paper Equity & Drawdown | Gross vs. Net Spread After Fees | L2 Depth & Execution Slippage |
+| :---: | :---: | :---: |
+| ![Equity Curve](docs/proof/equity_1000_paper.png) | ![Spread vs Fees](docs/proof/spread_vs_fees.png) | ![Depth Slippage](docs/proof/orderbook_depth_slippage.png) |
 
-1. **Buy** when YES on one platform plus NO on the other costs at least **2¢ less than $1**, after fees.
-2. **Sell** both sides as soon as selling them makes at least **2¢ profit** per pair, after fees.
-3. **Otherwise hold** until settlement, where the pair pays $1 and the profit locked in at entry is collected.
+---
 
-So the strategy **never sells at a loss**. YES and NO are always bought in the same quantity, so the position stays balanced, and the size is limited to what's available at the best price on each platform.
+## Responsive Quant Terminal UI (`1440×900` & `390×844`)
 
-Both 2¢ thresholds can be changed in `config.py` (`entry_edge` and `take_profit`).
+| Desktop Scanner (`1440×900`) | Mobile Viewport (`390×844`) |
+| :---: | :---: |
+| ![Desktop Dashboard](docs/proof/dashboard-desktop.png) | ![Mobile Dashboard](docs/proof/dashboard-mobile.png) |
 
-## Setup
+---
 
-### 1. Install
+## Tools, Skills, AI & Quant Stack
 
-Requires Python 3.10+.
+- **Quantitative Pricing & Market Microstructure:** Python `3.12+`, `synpath==0.11.0` (`FeeSchedule`, market discovery & venue normalization), custom 5-level L2 order-book VWAP & complement-flip engine (`src/orderbook.py`), quadratic cent-rounding fee model (`src/arbitrage.py`), settlement-rule gate (`src/matcher.py`), stateful `$1,000` paper-account ledger (`trading/paper_account.py`).
+- **Simulation, Analytics & Visualization:** NumPy, Matplotlib (dark-theme quantitative equity, fee-frontier, and L2 slippage figures in `backtest/paper_replay.py`), deterministic PRNG walk-forward (`seed=42`).
+- **Backend & Real-Time Streaming:** FastAPI, Uvicorn, Pydantic v2, native WebSockets (`/ws/stream`), REST endpoints for L2 depth curves, live Polymarket Gamma public API proxy, exact fee/sizing calculation, and paper-bot execution.
+- **Frontend Terminal:** Vanilla ES6+, responsive dark-mode CSS grid/flexbox (`390×844` mobile & `1440×900` desktop verified), live WebSocket tick highlighting, L2 book modal, sizing & payoff matrix calculator, and full 29-trade replay ledger CSV export.
+- **Verification & Visual Proof Tooling:** `pytest` (`28 passed`), FastAPI `TestClient` + WebSocket tests, Playwright headless Chromium automation (console/page-error & mobile horizontal-overflow assertions), and FFmpeg (`libx264` MP4 + 2-pass palette GIF).
+
+---
+
+## Quickstart & Verification
+
+### 1. Install Dependencies
 
 ```bash
-git clone https://github.com/Synpath-ai/prediction-market-arbitrage-trading-bot
-cd prediction-market-arbitrage-trading-bot
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-### 2. Add your Synpath API key
+*(Optional)* Copy `.env.example` to `.env` if connecting to live authenticated feeds via `SYNPATH_API_KEY`. The server, backtest replay, and L2 WebSocket simulation mode run **100% offline with no API keys required**.
+
+### 2. Run the Deterministic `$1,000` Paper Replay & Generate Charts
 
 ```bash
-cp .env.example .env        # then set SYNPATH_API_KEY
+python -m backtest.paper_replay
 ```
 
-Get a key at [synpath.dev](https://www.synpath.dev). It's used for market matching, live prices and history. No exchange accounts or trading keys are needed.
+Generates `out/paper_replay_1000.json` and updates the three quantitative figures in `docs/proof/`.
 
-### 3. Find markets
+### 3. Launch the FastAPI Quant Terminal & WebSocket Server
 
 ```bash
-python -m src.discover --save
+python server.py
+# or: uvicorn server:app --host 127.0.0.1 --port 8080
 ```
 
-This finds the **10 markets with the best arbitrage profit available right now** (after fees), among markets listed on both Kalshi and Polymarket that settle under the same rules, and saves them to `markets.json`. The bot and the backtest use them automatically. It reads live prices for every candidate, so it can take a minute.
+Open `http://127.0.0.1:8080/` (or `http://127.0.0.1:8080/?view=terminal&tab=scanner`).
 
-Change what it picks with `--limit 20`, `--sort gap` (largest price difference right now) or `--sort volume` (most traded), and narrow the search with `--query "senate"` or `--domain election`.
-
-For live Kalshi prices over WebSocket, also add a Kalshi API key (`KALSHI_KEY_ID` and `KALSHI_PRIVATE_KEY_PATH`): Kalshi signs every WebSocket connection, even for market data. Without one, the bot reads Kalshi's public order book every 2 seconds instead. Polymarket's WebSocket needs no key.
-
-### 4. Set the strategy
-
-Adjust the rest of `config.py` to taste:
-
-| Option | Description | Default |
-|---|---|---|
-| `entry_edge` | Minimum profit per $1 pair, after fees, to enter | `0.02` |
-| `take_profit` | Minimum round-trip profit per pair to exit | `0.02` |
-| `contracts` | Contracts per leg (capped by available liquidity) | `1000` |
-| `require_same_rules` | Only trade markets whose rules match | `True` |
-| `kalshi_poll_seconds` | Seconds between Kalshi book reads when there is no Kalshi key | `2` |
-| `status_interval_seconds` | At most one status line per market this often (entries and exits always print) | `60` |
-
-## Finding Arbitrage Opportunities
-
-The bot doesn't ship with any markets preselected. Use the discovery tool to list markets that trade on both platforms:
+### 4. Run the Full Test Suite
 
 ```bash
-python -m src.discover                        # 10 markets with the best profit right now
-python -m src.discover --sort volume --limit 5  # most traded
-python -m src.discover --query "senate" --save  # search by keyword and save
+python -m pytest -v
 ```
 
-Market matching is done by Synpath, not by comparing titles. Each matched market comes with a rule check:
+---
 
-- **`same`**: both platforms settle the market the same way. These are the only markets used by default.
-- **`insufficient`**: one platform's rules don't state every detail.
-- **`not_same`**: the markets can settle differently, so it is **not** an arbitrage. Never used.
+## Documentation & Verification Artifacts
 
-Add `--save` to keep the `same` markets in `markets.json`, which the bot and backtest then use. To pick markets by hand instead, list them in `config.py` or pass `--market EVENT_ID KALSHI_ID`.
-
-## Live Trading
-
-```bash
-python -m trading                                      # every saved market
-python -m trading --market <event_id> kalshi:<TICKER>  # a single market
-```
-
-The bot subscribes to both platforms' order books over WebSocket (Polymarket's always; Kalshi's when a Kalshi key is set, otherwise it reads Kalshi every 2 seconds) and re-prices a market the moment either book moves. It prints what the strategy does: an **entry** signal opens a paper position at the quoted prices, an **exit** signal closes it at the bids and records the profit, and otherwise it reports the position being held, at most once a minute per market. Paper positions are saved to `state/positions.json`, so they carry over after a restart, and every completed trade is recorded in `state/trades.csv`.
-
-No orders are sent. To trade for real, place the two legs with [Synpath](https://github.com/Synpath-ai/synpath). Two exchanges can't fill one atomic trade, so one leg can fill while the other doesn't: the usual answer is to rest a limit order on the thinner side and, the moment it fills, take the other side with a fill-or-kill order, with an unwind ready if the hedge misses.
-
-## Backtesting
-
-```bash
-python -m backtest.backtest --days 60                     # 1-minute bars
-python -m backtest.backtest --days 60 --timeframe 1h      # hourly bars
-python -m backtest.backtest --until "2026-09-27 11:00"    # a fixed window, to reproduce a run
-python -m backtest.charts
-python -m backtest.charts --market kalshi:<TICKER> --start YYYY-MM-DD --end YYYY-MM-DD
-```
-
-The backtest runs the same strategy code on 1-minute price history (hourly or 5-minute with `--timeframe`) and reports the trades and P&L for each market. The charts show, for each market:
-
-- **Prices:** both platforms' prices, with the spread shaded and every entry and exit marked
-- **P&L:** cumulative P&L, with the profit of each trade
-
-Options: `--by-close` counts trades by the date they closed, `--best` shows each market's best run of consecutive trades, and `--generic-names` labels markets as Market A, B, C for sharing.
-
-## Project Layout
-
-```
-prediction-market-arbitrage-trading-bot/
-├── config.py            # Markets, strategy parameters, position size
-├── trading/
-│   ├── __main__.py      # Entry point: python -m trading
-│   ├── bot.py           # Live strategy loop, paper positions and trades
-│   └── feed.py          # Live order books over the venues' WebSockets
-├── src/
-│   ├── strategy.py      # Entry and exit rules
-│   ├── arbitrage.py     # Arbitrage pricing, fees, profit calculation
-│   ├── matcher.py       # Cross-platform market matching and rule check
-│   └── discover.py      # Finds markets listed on both platforms
-├── backtest/
-│   ├── data.py          # Historical 1-minute (or hourly) prices
-│   ├── backtest.py      # Strategy simulation
-│   └── charts.py        # Entry/exit and P&L charts
-└── tests/               # Offline unit tests
-```
-
-## Powered by Synpath
-
-[![Synpath](https://img.shields.io/badge/Synpath-synpath.dev-7c3aed?style=for-the-badge)](https://www.synpath.dev)
-[![Synpath on GitHub](https://img.shields.io/badge/GitHub-Synpath--ai%2Fsynpath-181717?style=for-the-badge&logo=github)](https://github.com/Synpath-ai/synpath)
-
-This bot is built on **[Synpath](https://www.synpath.dev)**, one API for every prediction market. It uses Synpath's cross-venue market matching, live order books, fee schedules and price history.
-
-Synpath does much more than this bot needs:
-
-| | |
-|---|---|
-| **Venues** | Kalshi, Polymarket, Polymarket US and Opinion, through one SDK |
-| **Smart order routing** | One order across Kalshi and Polymarket, filled from the cheapest price after fees |
-| **Advanced order types** | Stop, stop-limit, trailing stop, iceberg, OCO, bracket, TWAP and peg on every venue |
-| **Market matching** | The same market on every platform, with settlement rules compared |
-| **Data** | Unified order books, trades, fees, live streams and tick-level Kalshi order book history |
-| **Execution engine** | Orders journaled before sending, pre-trade risk rules, crash-safe restarts |
-
-Get an API key at **[synpath.dev](https://www.synpath.dev)**. The Synpath SDK is open source (MIT) at **[github.com/Synpath-ai/synpath](https://github.com/Synpath-ai/synpath)**.
-
-## Disclaimer
-
-**Read this before using this project.**
-
-- **Not financial advice.** Nothing in this repository is investment, financial, legal or tax advice, or a recommendation to buy or sell anything.
-- **Educational and research use only.** The code is provided to demonstrate a strategy, not as a trading product.
-- **No trading.** The bot only paper trades: it records simulated positions at quoted prices and never places real orders.
-- **No guarantee of profit.** "Locked-in" profit depends on both platforms settling the market the same way. Rules can differ, markets can be disputed or voided, and you can lose money.
-- **Not affiliated.** This project is not affiliated with, endorsed by, or sponsored by Kalshi or Polymarket.
-- **Use at your own risk.** The software is provided "as is", without warranty of any kind (see the MIT license). The authors are not liable for any loss arising from its use.
-
-## License
-
-MIT
+- [`docs/CASE_STUDY.md`](docs/CASE_STUDY.md) — Engineering & microstructure deep dive (settlement risk, fee nonlinearity, L2 depth sizing, early convergence).
+- [`docs/PROOF_OF_WORK.md`](docs/PROOF_OF_WORK.md) — Verifiable command outputs, 28-test inventory, file artifacts, and exact observed `$1,000` replay numbers.
+- [`NOTICE.md`](NOTICE.md) — Upstream attribution and modification summary for [`Synpath-ai/prediction-market-arbitrage-trading-bot`](https://github.com/Synpath-ai/prediction-market-arbitrage-trading-bot).
+- [`LICENSE`](LICENSE) — MIT License.

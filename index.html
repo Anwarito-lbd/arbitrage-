@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ArbitrageX: Quantitative cross-venue prediction market arbitrage research terminal, L2 slippage engine, and simulated paper-trading platform built on Synpath.">
+  <title>ArbitrageX | Cross-Venue Prediction Market Arbitrage Terminal</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2300f090'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='bold' font-family='monospace' fill='%2307090e'%3E%24%3C/text%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="index.css">
+</head>
+<body class="mode-landing">
+  <!-- Top Marquee Banner -->
+  <div id="top-ticker-banner" class="ticker-wrap">
+    <div class="ticker-badge">
+      <span class="live-dot pulse"></span>
+      <span class="ticker-title">SIMULATED L2 FEED</span>
+    </div>
+    <div id="ticker-stream" class="ticker-move">
+      <span class="ticker-item"><span class="ticker-label">KALSHI ↔ POLY</span> Fed Rate Cut Dec 2026: <strong class="text-profit">YES $0.45 + NO $0.49 (after Kalshi quadratic fee)</strong></span>
+      <span class="ticker-item"><span class="ticker-label">KALSHI ↔ POLY</span> US CPI &lt; 2.5% Q4 2026: <strong class="text-profit">YES $0.39 + NO $0.56 (Rule check: same)</strong></span>
+      <span class="ticker-item"><span class="ticker-label">PAPER REPLAY</span> $1,000.00 Start → <strong class="text-profit">$1,748.05 Final (+74.81% Sim ROI, 29 Trades)</strong></span>
+      <span class="ticker-item"><span class="ticker-label">RULE GUARD</span> TikTok Enforcement Pair: <strong class="text-warning">REJECTED (not_same settlement criteria)</strong></span>
+    </div>
+    <div class="ticker-time" id="ticker-clock">UTC 00:00:00</div>
+  </div>
+
+  <!-- Main Navigation Header -->
+  <header id="main-header" class="header">
+    <div class="header-container">
+      <div class="brand-group">
+        <a href="#landing" id="brand-home-link" class="brand-logo">
+          <div class="logo-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+          </div>
+          <div class="logo-text">
+            <span class="brand-title">Arbitrage<span>X</span></span>
+            <span class="brand-subtitle">CROSS-VENUE QUANT ARBITRAGE TERMINAL</span>
+          </div>
+        </a>
+
+        <div class="site-nav-links" id="site-nav-links">
+          <a href="#worked-example" class="nav-link">Math Proof</a>
+          <a href="#features" class="nav-link">Architecture</a>
+          <a href="#modes" class="nav-link">Execution Modes</a>
+          <a href="#faq" class="nav-link">Risk &amp; FAQ</a>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs (Visible in Terminal Mode) -->
+      <nav id="terminal-nav-tabs" class="nav-tabs hidden" aria-label="Terminal Navigation">
+        <button id="tab-btn-scanner" class="tab-btn active" data-tab="scanner">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24M14.83 9.17l4.24-4.24M14.83 14.83l4.24 4.24M9.17 14.83l-4.24 4.24"/></svg>
+          Live Scanner
+          <span id="tab-opp-count" class="badge-count">5</span>
+        </button>
+        <button id="tab-btn-calculator" class="tab-btn" data-tab="calculator">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/></svg>
+          Sizing &amp; Fees
+        </button>
+        <button id="tab-btn-bot" class="tab-btn" data-tab="bot">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 15h.01M16 15h.01"/></svg>
+          $1k Paper Bot
+          <span id="bot-status-pill" class="badge-pill active">SIMULATION</span>
+        </button>
+        <button id="tab-btn-ledger" class="tab-btn" data-tab="ledger">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span>Replay Ledger (<span id="ledger-count">29</span>)</span>
+        </button>
+      </nav>
+
+      <!-- Global Actions -->
+      <div class="header-actions">
+        <div id="data-source-switcher" class="data-source-pill hidden">
+          <button id="source-demo-btn" class="source-toggle-btn active" title="Simulated L2 Order-Book Stream">L2 Sim Feed</button>
+          <button id="source-live-btn" class="source-toggle-btn" title="Query Polymarket Gamma Public API">Live Poly API</button>
+        </div>
+
+        <div class="account-pill" id="paper-account-pill" title="Simulated $1,000 Paper Account Replay Equity">
+          <div class="account-avatar">SIM</div>
+          <div class="account-info">
+            <span class="account-role">Paper Replay ($1k Start)</span>
+            <span id="header-bankroll" class="account-balance">$1,748.05</span>
+          </div>
+        </div>
+
+        <button id="toggle-view-btn" class="action-btn-sm primary glowing-cta">
+          <span class="icon">⚡</span>
+          <span id="toggle-view-text">Launch Terminal</span>
+        </button>
+
+        <button id="sound-toggle-btn" class="icon-action-btn" title="Toggle audio alerts on new simulated spread">
+          <svg id="sound-icon-on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          <svg id="sound-icon-off" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       SECTION 1: QUANT RESEARCH LANDING OVERVIEW
+       ========================================================================= -->
+  <div id="landing-page-container" class="landing-page">
+    <section class="hero-section" id="landing">
+      <div class="hero-glow-backdrop"></div>
+      <div class="hero-content">
+        <div class="hero-badge">
+          <span class="live-dot pulse"></span>
+          <span>PAPER TRADING &amp; RESEARCH ENGINE · MIT LICENSE (SYNPATH BASE)</span>
+        </div>
+        <h1 class="hero-title">
+          Cross-Venue Prediction Market <span class="gradient-text">Arbitrage Engine</span>.
+        </h1>
+        <p class="hero-subtitle">
+          Scans L2 order books across <strong>Kalshi</strong> and <strong>Polymarket</strong>, verifies settlement-rule equivalence via Synpath, models exact quadratic taker fees and VWAP slippage, and executes deterministic <strong>simulated paper-account</strong> replays. No real-money orders are sent.
+        </p>
+
+        <div class="hero-actions">
+          <button id="hero-launch-terminal-btn" class="action-btn primary large glow-btn">
+            ⚡ Open Live Quant Terminal
+          </button>
+          <a href="#worked-example" class="action-btn secondary large">
+            🔍 Inspect Fee &amp; Payoff Math
+          </a>
+        </div>
+
+        <!-- Real Observed Metrics from Deterministic $1,000 Paper Account Replay -->
+        <div class="hero-stats-grid">
+          <div class="hero-stat-card">
+            <span class="stat-num" id="landing-stat-init">$1,000.00</span>
+            <span class="stat-label">Simulated Initial Capital</span>
+          </div>
+          <div class="hero-stat-card">
+            <span class="stat-num text-profit" id="landing-stat-final">$1,748.05</span>
+            <span class="stat-label">60d Sim Final Equity (+74.81% ROI)</span>
+          </div>
+          <div class="hero-stat-card">
+            <span class="stat-num text-accent" id="landing-stat-sharpe">8.59</span>
+            <span class="stat-label">Daily Ann. Sharpe (-5.64% Max MTM DD)</span>
+          </div>
+          <div class="hero-stat-card">
+            <span class="stat-num" id="landing-stat-trades">29 / 29</span>
+            <span class="stat-label">Sim Trades ($499.21 Fees, $3.02 Slip)</span>
+          </div>
+        </div>
+
+        <!-- Terminal Preview Card -->
+        <div class="hero-preview-window">
+          <div class="window-bar">
+            <div class="window-dots">
+              <span class="w-dot red"></span><span class="w-dot yellow"></span><span class="w-dot green"></span>
+            </div>
+            <span class="window-title">ArbitrageX Terminal — L2 Simulation &amp; Paper Ledger (Kalshi ↔ Polymarket)</span>
+            <span class="window-badge">● WS /api/paper-account</span>
+          </div>
+          <div class="window-body">
+            <div class="preview-arb-row">
+              <div class="preview-market">
+                <strong>US Federal Reserve Cuts Rates ≥ 25bps Dec 2026</strong>
+                <span class="preview-tag">Rule Check: same · 45d to expiry</span>
+              </div>
+              <div class="preview-legs">
+                <span class="p-badge kalshi">Kalshi YES $0.45</span>
+                <span class="p-plus">+</span>
+                <span class="p-badge poly">Polymarket NO $0.49</span>
+              </div>
+              <div class="preview-math">
+                <span class="p-label">Gross:</span> <strong>$0.94</strong>
+                <span class="p-label">Kalshi Fee:</span> <strong>~$0.0173</strong>
+              </div>
+              <div class="preview-yield">
+                <span class="edge-badge">+4.54% Net Edge</span>
+                <span class="apy-badge">Delta-Neutral Pair</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: WORKED MATHEMATICAL EXAMPLE -->
+    <section class="section-container" id="worked-example">
+      <div class="section-header text-center">
+        <span class="section-tag">EXACT FEE-ADJUSTED PAYOFF DERIVATION</span>
+        <h2 class="section-title">How Cross-Venue Binary Arbitrage Pricing Works</h2>
+        <p class="section-desc">Because mutually exclusive YES + NO contracts on identical settlement rules pay $1.00 at resolution, a hedged pair locks in <code>1.00 - (P_YES + P_NO + fees + slippage)</code> whenever positive.</p>
+      </div>
+
+      <div class="worked-example-card">
+        <div class="example-header">
+          <div class="example-event">
+            <span class="category-tag">Verified Mathematical Example (Kalshi Quadratic Fee Formula)</span>
+            <h3>Event: "US Federal Reserve Rate Cut in December 2026"</h3>
+            <span class="expiry-tag">30 Days to Resolution · $1.00 Binary Settlement · Rule Verdict: same</span>
+          </div>
+          <div class="example-total-return">
+            <span class="hero-profit-label">SIMULATED NET EDGE (AFTER FEES)</span>
+            <span class="hero-profit-number text-profit">+$44.74</span>
+            <span class="example-roi">+4.45% Net ROI on $1,005.26 Deployed</span>
+          </div>
+        </div>
+
+        <div class="example-steps-grid">
+          <div class="example-step">
+            <div class="step-badge">LEG 1 · KALSHI</div>
+            <h4>Buy 1,050 YES on Kalshi</h4>
+            <p>Kalshi L2 ask quotes <strong>YES @ $0.46</strong> with sufficient top-level depth.</p>
+            <div class="step-math-box">
+              <span>Notional: <strong>$483.00</strong> (1,050 × $0.46)</span>
+              <span>Kalshi Quadratic Taker Fee:</span>
+              <span class="text-muted">⌈0.07 × 1050 × 0.46 × 0.54⌉ = <strong>$18.26</strong></span>
+            </div>
+          </div>
+
+          <div class="example-step">
+            <div class="step-badge poly">LEG 2 · POLYMARKET</div>
+            <h4>Buy 1,050 NO on Polymarket</h4>
+            <p>Polymarket CLOB quotes <strong>NO @ $0.48</strong> (flipped-safe normalization).</p>
+            <div class="step-math-box">
+              <span>Notional: <strong>$504.00</strong> (1,050 × $0.48)</span>
+              <span>Polymarket CTF Fee:</span>
+              <span class="text-muted">0.0% standard CTF taker = <strong>$0.00</strong></span>
+            </div>
+          </div>
+
+          <div class="example-step highlight">
+            <div class="step-badge green">SETTLEMENT PAYOFF</div>
+            <h4>Matched-Rule Binary Resolution</h4>
+            <div class="outcome-pill-box">
+              <div class="outcome-row">
+                <span class="badge-outcome yes">If YES Resolves</span>
+                <span>Kalshi $1,050.00 | Poly $0.00</span>
+                <strong class="text-profit">Gross: $1,050.00</strong>
+              </div>
+              <div class="outcome-row">
+                <span class="badge-outcome no">If NO Resolves</span>
+                <span>Kalshi $0.00 | Poly $1,050.00</span>
+                <strong class="text-profit">Gross: $1,050.00</strong>
+              </div>
+            </div>
+            <div class="final-net-box">
+              <span>Total Deployed (w/ Fees): <strong>$1,005.26</strong></span>
+              <span>Settlement Payout: <strong>$1,050.00</strong></span>
+              <span>Locked Net Spread: <strong class="text-profit">+$44.74 (+4.45%)</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: PLATFORM ARCHITECTURE & FEATURES -->
+    <section class="section-container" id="features">
+      <div class="section-header text-center">
+        <span class="section-tag">SYSTEM ARCHITECTURE</span>
+        <h2 class="section-title">Quantitative Pipeline &amp; Execution Safeguards</h2>
+        <p class="section-desc">Built atop Synpath's open-source SDK with L2 order-book slippage simulation, rule verification, and strict paper-account capital accounting.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3>Settlement Rule Verifier</h3>
+          <p>Enforces <code>rules == "same"</code> before sizing any position. Pairs marked <code>not_same</code> or mismatched beyond <code>MAX_DISAGREEMENT = 0.50</code> are automatically rejected.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>L2 VWAP &amp; Slippage Simulator</h3>
+          <p>Walks 5-level bid/ask ladders on both venues to compute exact VWAP fill prices, execution slippage in basis points, and depth-capped contract quantities.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🧮</div>
+          <h3>Exact Venue Fee Schedules</h3>
+          <p>Models Kalshi's <code>ceil(0.07·C·p·(1-p))</code> cent-rounded quadratic taker fee and Polymarket's 0% CTF or configurable <code>quadratic_theta</code> fee.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💼</div>
+          <h3>$1,000 Paper Account Engine</h3>
+          <p>Tracks available cash, deployed collateral, 45% single-market allocation caps, mark-to-market drawdown, and daily annualized Sharpe ratio.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔄</div>
+          <h3>Early Convergence Unwind</h3>
+          <p>Monitors exit bids continuously; closes both legs early when net round-trip profit exceeds <code>take_profit</code> (2.0¢), or holds to deterministic $1.00 settlement.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>FastAPI + WebSocket Stream</h3>
+          <p>Serves REST calculations, L2 depth inspection, live Polymarket Gamma API polling, and simulated WebSocket order-book ticks with zero external keys required.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: EXECUTION MODES -->
+    <section class="section-container" id="modes">
+      <div class="section-header text-center">
+        <span class="section-tag">OPEN-SOURCE MODES (MIT)</span>
+        <h2 class="section-title">Three Ways to Run ArbitrageX</h2>
+        <p class="section-desc">All modes run locally from this repository with full transparency and zero real-money risk by default.</p>
+      </div>
+
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <div class="pricing-badge">DETERMINISTIC REPLAY</div>
+          <h3 class="plan-name">Offline $1k Paper Backtest</h3>
+          <div class="plan-price">0 Keys <span>Needed</span></div>
+          <p class="plan-desc">Reproduce the 60-day walk-forward L2 replay and regenerate all matplotlib proof charts locally.</p>
+          <ul class="plan-features">
+            <li>✓ <code>python -m backtest.paper_replay</code></li>
+            <li>✓ 1,440 hourly L2 bars × 6 market pairs</li>
+            <li>✓ Exact Kalshi quadratic cent rounding</li>
+            <li>✓ Outputs JSON ledger &amp; PNG proof charts</li>
+          </ul>
+          <button class="action-btn secondary wide launch-terminal-trigger">View Replay in Terminal</button>
+        </div>
+
+        <div class="pricing-card featured">
+          <div class="pricing-badge featured">WEB TERMINAL</div>
+          <h3 class="plan-name">FastAPI + WS Sim Terminal</h3>
+          <div class="plan-price">Local <span>Server</span></div>
+          <p class="plan-desc">Interactive scanner, L2 slippage calculator, live Polymarket API toggle, and WebSocket tick stream.</p>
+          <ul class="plan-features">
+            <li>✓ <code>python server.py</code> (port 8000)</li>
+            <li>✓ WebSocket <code>/ws/stream</code> order-book feed</li>
+            <li>✓ Live Polymarket Gamma API option</li>
+            <li>✓ Interactive paper position &amp; CSV export</li>
+          </ul>
+          <button class="action-btn primary wide glow-btn launch-terminal-trigger">Launch Web Terminal</button>
+        </div>
+
+        <div class="pricing-card">
+          <div class="pricing-badge">LIVE SYNPATH STREAM</div>
+          <h3 class="plan-name">Synpath Paper Runner</h3>
+          <div class="plan-price">API Key <span>Optional</span></div>
+          <p class="plan-desc">Stream live Polymarket WebSocket &amp; Kalshi books via <code>synpath</code> in paper-trading mode.</p>
+          <ul class="plan-features">
+            <li>✓ <code>python -m src.discover --save</code></li>
+            <li>✓ <code>python -m trading</code> (paper only)</li>
+            <li>✓ Persistent <code>state/positions.json</code></li>
+            <li>✓ Upstream MIT attribution to Synpath-ai</li>
+          </ul>
+          <a href="#worked-example" class="action-btn secondary wide" style="text-align:center;text-decoration:none;">Inspect Strategy Rules</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: FAQ & RISK DISCLOSURES -->
+    <section class="section-container" id="faq">
+      <div class="section-header text-center">
+        <span class="section-tag">RISK ENGINEERING &amp; FAQ</span>
+        <h2 class="section-title">Execution Risks &amp; Methodology</h2>
+      </div>
+
+      <div class="faq-accordion">
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>Are simulated paper returns guaranteed in live trading?</span>
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <p><strong>No.</strong> All results shown in this repository are from a deterministic 60-day simulated L2 paper replay starting with $1,000.00 virtual capital. Real cross-venue trading introduces non-atomic leg execution risk (one venue fills while the other moves), oracle/settlement rule disputes, withdrawal/gas latency, and capital lockup opportunity cost.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>How does the bot prevent settlement-rule mismatches?</span>
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <p><code>src/matcher.py</code> uses Synpath's rule comparison audit (<code>same</code>, <code>insufficient</code>, <code>not_same</code>) plus a <code>MAX_DISAGREEMENT = 0.50</code> midpoint guard. In our replay universe, the TikTok enforcement pair is flagged <code>not_same</code> and explicitly skipped before any capital is allocated.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>How are Kalshi and Polymarket fees modeled?</span>
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <p>Kalshi uses <code>synpath.FeeSchedule</code> quadratic pricing: <code>ceil(0.07 × C × P × (1 - P) × 100) / 100</code>, rounding up to the nearest cent per order. Standard Polymarket CTF markets use 0.0% taker fees (configurable via <code>quadratic_theta</code>). Both entry and exit fees are deducted before checking the 2.0¢ minimum edge threshold.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>What happens when no API keys are configured?</span>
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <p><code>server.py</code> runs cleanly offline in <strong>Simulated L2 Mode</strong>, streaming synthetic order-book updates over WebSocket <code>/ws/stream</code> and serving the deterministic <code>$1,000.00</code> paper replay ledger. Optionally, clicking <em>Live Poly API</em> queries Polymarket's public Gamma API directly.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="site-footer">
+      <div class="footer-container">
+        <div class="footer-top">
+          <div class="footer-brand">
+            <span class="brand-title">Arbitrage<span>X</span></span>
+            <p>Open-source cross-venue prediction market arbitrage terminal &amp; paper replay engine (MIT License, built on Synpath-ai).</p>
+          </div>
+          <div class="footer-links-group">
+            <h4>Navigation</h4>
+            <a href="#landing" id="footer-link-home">Overview</a>
+            <a href="#worked-example">Math Proof</a>
+            <a href="#features">Architecture</a>
+            <a href="#modes">Execution Modes</a>
+          </div>
+          <div class="footer-links-group">
+            <h4>Upstream &amp; Venues</h4>
+            <a href="https://github.com/Synpath-ai/prediction-market-arbitrage-trading-bot" target="_blank" rel="noopener">Synpath Upstream (MIT)</a>
+            <a href="https://polymarket.com" target="_blank" rel="noopener">Polymarket</a>
+            <a href="https://kalshi.com" target="_blank" rel="noopener">Kalshi</a>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>MIT License · Research &amp; educational simulation only · Not financial advice · Zero live orders placed.</p>
+          <div class="footer-badges">
+            <span class="badge-pill active">PAPER SIMULATION MODE</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- =========================================================================
+       SECTION 2: LIVE ARBITRAGE TERMINAL WORKSPACE
+       ========================================================================= -->
+  <div id="terminal-workspace-container" class="terminal-workspace hidden">
+    <section id="metrics-bar" class="metrics-bar">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Verified Pairs</span>
+          <span class="metric-icon">⚡</span>
+        </div>
+        <div class="metric-value-row">
+          <span id="metric-active-arbs" class="metric-value">5</span>
+          <span class="metric-sub text-positive">1 rule-rejected</span>
+        </div>
+        <div class="metric-footer">Kalshi ↔ Polymarket (rules: same)</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Best Net Edge</span>
+          <span class="metric-icon">📈</span>
+        </div>
+        <div class="metric-value-row">
+          <span id="metric-highest-edge" class="metric-value text-profit">+4.54%</span>
+          <span class="metric-badge">After fees</span>
+        </div>
+        <div class="metric-footer" id="metric-best-market">Fed Rate Cut Dec 2026</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">$1k Paper Final Equity</span>
+          <span class="metric-icon">💼</span>
+        </div>
+        <div class="metric-value-row">
+          <span id="metric-final-equity" class="metric-value text-accent">$1,748.05</span>
+          <span class="metric-sub" id="metric-sharpe-badge">Sharpe 8.59</span>
+        </div>
+        <div class="metric-footer" id="metric-dd-footer">60d Sim Replay · Max MTM DD -5.64%</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Sim Realized P&amp;L</span>
+          <span class="metric-icon">📊</span>
+        </div>
+        <div class="metric-value-row">
+          <span id="metric-total-pnl" class="metric-value text-profit">+$748.05</span>
+          <span class="metric-badge" id="metric-win-rate">29/29 (100%)</span>
+        </div>
+        <div class="metric-footer" id="metric-fees-footer">$499.21 fees · $3.02 L2 slippage</div>
+      </div>
+    </section>
+
+    <main id="app-container" class="main-content">
+      <!-- TAB 1: LIVE ARBITRAGE SCANNER -->
+      <section id="view-scanner" class="view-panel active">
+        <div class="toolbar-card">
+          <div class="toolbar-row top">
+            <div class="search-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="market-search-input" placeholder="Search markets (e.g. Fed, CPI, Bitcoin, SpaceX, Senate)..." autocomplete="off">
+              <button id="search-clear-btn" class="clear-btn hidden" title="Clear search">&times;</button>
+            </div>
+
+            <div class="category-pills" id="category-filter-group">
+              <button class="pill-btn active" data-category="all">All Categories</button>
+              <button class="pill-btn" data-category="economics">Economics &amp; Fed</button>
+              <button class="pill-btn" data-category="crypto">Crypto</button>
+              <button class="pill-btn" data-category="science">Science</button>
+              <button class="pill-btn" data-category="politics">Politics</button>
+            </div>
+          </div>
+
+          <div class="toolbar-row bottom">
+            <div class="filter-group">
+              <span class="filter-label">Min Net Edge:</span>
+              <div class="filter-btn-group" id="edge-filter-group">
+                <button class="filter-opt-btn active" data-min-edge="0">All (&gt;0%)</button>
+                <button class="filter-opt-btn" data-min-edge="2.0">&gt;2.0%</button>
+                <button class="filter-opt-btn" data-min-edge="3.5">&gt;3.5%</button>
+                <button class="filter-opt-btn" data-min-edge="4.5">&gt;4.5%</button>
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <span class="filter-label">Venues:</span>
+              <select id="venue-select" class="custom-select">
+                <option value="all">All Venue Combinations</option>
+                <option value="kalshi-polymarket">Kalshi ↔ Polymarket</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <span class="filter-label">Sort By:</span>
+              <select id="sort-select" class="custom-select">
+                <option value="edge-desc">Highest Net Margin (%)</option>
+                <option value="apy-desc">Highest Annualized APY</option>
+                <option value="profit-desc">Max L2 Depth</option>
+                <option value="date-asc">Resolving Soonest</option>
+              </select>
+            </div>
+
+            <div class="stream-control">
+              <label class="toggle-switch">
+                <input type="checkbox" id="live-stream-toggle" checked>
+                <span class="slider"></span>
+              </label>
+              <span class="stream-label">WS Sim Stream</span>
+            </div>
+
+            <div class="view-mode-group">
+              <button id="view-mode-table" class="icon-btn active" title="Table View">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+              </button>
+              <button id="view-mode-cards" class="icon-btn" title="Cards View">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="scanner-results-container" class="scanner-results">
+          <div id="table-view-container" class="table-responsive">
+            <table class="arb-table" id="arbitrage-main-table">
+              <thead>
+                <tr>
+                  <th class="col-market">Market / Settlement Rule</th>
+                  <th class="col-leg">Leg 1 (Buy YES)</th>
+                  <th class="col-leg">Leg 2 (Buy NO)</th>
+                  <th class="col-cost">Gross Cost</th>
+                  <th class="col-fee">Est. Fees</th>
+                  <th class="col-edge">Net Edge %</th>
+                  <th class="col-apy">Est. APY</th>
+                  <th class="col-liquidity">Top Depth</th>
+                  <th class="col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="arb-table-body"></tbody>
+            </table>
+          </div>
+
+          <div id="cards-view-container" class="cards-grid hidden"></div>
+
+          <div id="no-results-state" class="empty-state hidden">
+            <div class="empty-icon">🔍</div>
+            <h3>No Arbitrage Opportunities Match Your Filters</h3>
+            <p>Try lowering the Minimum Net Edge threshold or clearing your search keywords.</p>
+            <button id="reset-filters-btn" class="action-btn secondary">Reset Filters</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: ARBITRAGE SIZING & FEE CALCULATOR -->
+      <section id="view-calculator" class="view-panel">
+        <div class="calc-grid">
+          <div class="card calc-config-card">
+            <div class="card-header">
+              <h2 class="card-title">L2 Sizing &amp; Fee Calculator</h2>
+              <span class="badge-pill active">Kalshi Quadratic Formula</span>
+            </div>
+
+            <div class="calc-body">
+              <div class="form-group">
+                <label for="calc-market-selector">Selected Market:</label>
+                <select id="calc-market-selector" class="custom-select wide"></select>
+              </div>
+
+              <div class="form-group">
+                <div class="label-with-val">
+                  <label for="calc-capital-input">Capital Allocation (Paper):</label>
+                  <span id="calc-capital-display" class="val-tag">$1,000.00</span>
+                </div>
+                <div class="input-with-symbol">
+                  <span class="symbol">$</span>
+                  <input type="number" id="calc-capital-input" value="1000" min="10" max="500000" step="50">
+                </div>
+                <div class="quick-capital-pills" id="calc-quick-pills">
+                  <button class="pill-btn-sm" data-amount="250">$250</button>
+                  <button class="pill-btn-sm" data-amount="450">$450</button>
+                  <button class="pill-btn-sm active" data-amount="1000">$1,000</button>
+                  <button class="pill-btn-sm" data-amount="2500">$2,500</button>
+                </div>
+              </div>
+
+              <div class="pricing-duo">
+                <div class="leg-edit-box venue-kalshi">
+                  <div class="leg-edit-title">
+                    <span id="calc-leg1-venue" class="venue-badge kalshi">KALSHI</span>
+                    <span id="calc-leg1-contract" class="contract-badge yes">BUY YES</span>
+                  </div>
+                  <div class="form-group sm">
+                    <label>Ask Price ($):</label>
+                    <input type="number" id="calc-leg1-price" value="0.45" step="0.01" min="0.01" max="0.99">
+                  </div>
+                  <div class="form-group sm">
+                    <label>Taker Fee Schedule:</label>
+                    <input type="text" id="calc-leg1-fee-rate" value="Quadratic (ceil to 1¢)" readonly class="readonly-input">
+                  </div>
+                </div>
+
+                <div class="leg-edit-box venue-polymarket">
+                  <div class="leg-edit-title">
+                    <span id="calc-leg2-venue" class="venue-badge poly">POLYMARKET</span>
+                    <span id="calc-leg2-contract" class="contract-badge no">BUY NO</span>
+                  </div>
+                  <div class="form-group sm">
+                    <label>Ask Price ($):</label>
+                    <input type="number" id="calc-leg2-price" value="0.49" step="0.01" min="0.01" max="0.99">
+                  </div>
+                  <div class="form-group sm">
+                    <label>Taker Fee Schedule:</label>
+                    <input type="text" id="calc-leg2-fee-rate" value="0.0% (Standard CTF)" readonly class="readonly-input">
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="calc-days-input">Days to Resolution:</label>
+                <input type="number" id="calc-days-input" value="45" min="1" max="730">
+              </div>
+
+              <div class="calc-action-row">
+                <button id="calc-recalculate-btn" class="action-btn primary wide">
+                  ⚡ Recalculate Exact L2 Sizing &amp; Fees
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card calc-output-card">
+            <div class="card-header">
+              <h2 class="card-title">Fee-Adjusted Settlement Breakdown</h2>
+              <span class="status-indicator-tag amber">Paper Simulation Only</span>
+            </div>
+
+            <div class="calc-results-body">
+              <div class="hero-profit-card">
+                <div class="hero-profit-label">SIMULATED NET SPREAD AT SETTLEMENT</div>
+                <div id="calc-guaranteed-profit" class="hero-profit-number">+$43.28</div>
+                <div class="hero-profit-metrics">
+                  <span class="sub-metric">Net ROI: <strong id="calc-roi-percent" class="text-profit">+4.45%</strong></span>
+                  <span class="sub-metric">Est. APY: <strong id="calc-apy-percent" class="text-accent">+42.4%</strong></span>
+                  <span class="sub-metric">L2 Slippage: <strong id="calc-slippage-usd">$0.00</strong></span>
+                </div>
+              </div>
+
+              <div class="execution-instructions">
+                <h3 class="instructions-title">Matched Dual-Leg Paper Order Plan</h3>
+
+                <div class="order-step-item">
+                  <div class="step-num">1</div>
+                  <div class="step-details">
+                    <div class="step-top">
+                      <span class="venue-tag" id="plan-venue-1">KALSHI</span>
+                      <span class="action-tag">Buy YES Contracts</span>
+                    </div>
+                    <div class="step-math">
+                      Buy <strong id="plan-shares-1">1,045 contracts</strong> @ <span id="plan-price-1">$0.45</span>
+                      <span class="step-cost">= <span id="plan-cost-1">$470.25</span> (+ <span id="plan-fee-1">$18.11</span> fee)</span>
+                    </div>
+                  </div>
+                  <a id="plan-link-1" href="https://kalshi.com" target="_blank" rel="noopener" class="action-btn-sm secondary">Venue ↗</a>
+                </div>
+
+                <div class="order-step-item">
+                  <div class="step-num">2</div>
+                  <div class="step-details">
+                    <div class="step-top">
+                      <span class="venue-tag poly" id="plan-venue-2">POLYMARKET</span>
+                      <span class="action-tag">Buy NO Contracts</span>
+                    </div>
+                    <div class="step-math">
+                      Buy <strong id="plan-shares-2">1,045 contracts</strong> @ <span id="plan-price-2">$0.49</span>
+                      <span class="step-cost">= <span id="plan-cost-2">$512.05</span> (+ <span id="plan-fee-2">$0.00</span> fee)</span>
+                    </div>
+                  </div>
+                  <a id="plan-link-2" href="https://polymarket.com" target="_blank" rel="noopener" class="action-btn-sm secondary">Venue ↗</a>
+                </div>
+              </div>
+
+              <div class="payoff-matrix">
+                <h3 class="instructions-title">Matched-Rule Settlement Matrix</h3>
+                <table class="matrix-table">
+                  <thead>
+                    <tr>
+                      <th>Outcome</th>
+                      <th>Leg 1 Payout</th>
+                      <th>Leg 2 Payout</th>
+                      <th>Gross Payout</th>
+                      <th>Net Spread</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="badge-outcome yes">YES Wins</span></td>
+                      <td id="matrix-yes-leg1">$1,045.00</td>
+                      <td id="matrix-yes-leg2">$0.00</td>
+                      <td id="matrix-yes-gross">$1,045.00</td>
+                      <td class="text-profit" id="matrix-yes-net">+$44.59</td>
+                    </tr>
+                    <tr>
+                      <td><span class="badge-outcome no">NO Wins</span></td>
+                      <td id="matrix-no-leg1">$0.00</td>
+                      <td id="matrix-no-leg2">$1,045.00</td>
+                      <td id="matrix-no-gross">$1,045.00</td>
+                      <td class="text-profit" id="matrix-no-net">+$44.59</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="deploy-bot-row">
+                <button id="send-to-bot-btn" class="action-btn success wide">
+                  🤖 Simulate Paper Entry in $1k Bot
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: $1,000 PAPER TRADING BOT -->
+      <section id="view-bot" class="view-panel">
+        <div class="bot-control-card">
+          <div class="bot-info-meta">
+            <div class="bot-avatar">🤖</div>
+            <div>
+              <h2 class="bot-title">ArbitrageX $1,000 Paper Account &amp; Risk Engine</h2>
+              <p class="bot-desc">Simulates cross-venue WebSocket/L2 ticks, enforces 45% single-market caps and settlement-rule checks, and records paper fills with zero live orders.</p>
+            </div>
+          </div>
+          <div class="bot-toggle-group">
+            <div class="bot-status-tag" id="bot-status-badge">
+              <span class="pulse-indicator"></span>
+              <span id="bot-state-text">PAPER ENGINE ACTIVE</span>
+            </div>
+            <button id="bot-toggle-run-btn" class="action-btn warning">
+              ⏸ Pause Bot
+            </button>
+          </div>
+        </div>
+
+        <div class="bot-grid">
+          <div class="card bot-settings-card">
+            <h3 class="card-title">Strategy &amp; Risk Parameters</h3>
+
+            <div class="form-group">
+              <div class="label-with-val">
+                <label for="bot-min-edge-slider">Min Net Entry Edge (%):</label>
+                <span id="bot-min-edge-display" class="val-tag">2.0%</span>
+              </div>
+              <input type="range" id="bot-min-edge-slider" min="0.5" max="8.0" step="0.5" value="2.0">
+              <span class="field-hint">Only enter when net spread after Kalshi quadratic fees &amp; L2 slippage exceeds threshold.</span>
+            </div>
+
+            <div class="form-group">
+              <div class="label-with-val">
+                <label for="bot-max-size-input">Max Capital Per Market ($):</label>
+                <span id="bot-max-size-display" class="val-tag">$450</span>
+              </div>
+              <input type="number" id="bot-max-size-input" value="450" min="50" max="5000" step="50">
+              <span class="field-hint">45% single-market concentration cap on $1,000 initial capital.</span>
+            </div>
+
+            <div class="form-group">
+              <div class="label-with-val">
+                <label for="bot-take-profit-slider">Early Convergence Take-Profit (%):</label>
+                <span id="bot-take-profit-display" class="val-tag">2.0%</span>
+              </div>
+              <input type="range" id="bot-take-profit-slider" min="1.0" max="5.0" step="0.5" value="2.0">
+              <span class="field-hint">Unwind both legs early if round-trip net profit clears threshold.</span>
+            </div>
+
+            <div class="form-group">
+              <label>Execution Mode:</label>
+              <div class="radio-pill-group">
+                <label class="radio-label">
+                  <input type="radio" name="exec-mode" value="paper" checked>
+                  <span>Paper Simulation ($1k Replay)</span>
+                </label>
+              </div>
+            </div>
+
+            <button id="save-bot-config-btn" class="action-btn primary wide">Sync Parameters to Server</button>
+          </div>
+
+          <div class="card bot-telemetry-card">
+            <div class="card-header">
+              <h3 class="card-title">Simulated Order-Book &amp; Execution Log</h3>
+              <span class="terminal-dots">
+                <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+              </span>
+            </div>
+
+            <div id="bot-terminal-logs" class="terminal-body">
+              <div class="log-line info">[REPLAY] Loaded $1,000.00 Simulated Paper Replay: 29 trades closed, +$748.05 (+74.81% ROI), Sharpe 8.59, Max MTM DD -5.64%.</div>
+              <div class="log-line warn">[MATCHER] Skipped kalshi:TIKTOK-BAN26 (rules: not_same — differing DOJ vs Supreme Court resolution triggers).</div>
+              <div class="log-line success">[ENGINE] Connected to FastAPI WebSocket /ws/stream (L2 simulation mode, no API keys needed).</div>
+            </div>
+
+            <div class="terminal-footer">
+              <button id="clear-logs-btn" class="action-btn-sm secondary">Clear Log</button>
+              <span id="terminal-latency" class="latency-indicator">Mode: <strong>WS Paper Sim</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card section-card">
+          <div class="card-header">
+            <h3 class="card-title">Interactive Sandbox Paper Positions</h3>
+            <span class="badge-pill active">Simulated Paper Positions</span>
+          </div>
+          <div class="table-responsive">
+            <table class="arb-table" id="bot-positions-table">
+              <thead>
+                <tr>
+                  <th>Market Event</th>
+                  <th>Strategy Direction</th>
+                  <th>Entry Time</th>
+                  <th>Capital Deployed</th>
+                  <th>Locked Spread</th>
+                  <th>Net ROI</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="bot-positions-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: SIMULATED $1,000 REPLAY TRADE LEDGER -->
+      <section id="view-ledger" class="view-panel">
+        <div class="card section-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">$1,000 Simulated Paper Account Trade Ledger (60-Day Replay)</h2>
+              <p class="card-desc">Every trade from <code>python -m backtest.paper_replay</code> (seed=42, initial capital $1,000.00, exact Kalshi quadratic fees &amp; L2 VWAP slippage).</p>
+            </div>
+            <div class="header-tools">
+              <button id="export-csv-btn" class="action-btn secondary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="arb-table" id="history-ledger-table">
+              <thead>
+                <tr>
+                  <th>Trade ID</th>
+                  <th>Event / Proposition</th>
+                  <th>Leg 1 Entry</th>
+                  <th>Leg 2 Entry</th>
+                  <th>Deployed Capital</th>
+                  <th>Gross Payout</th>
+                  <th>Fees + Slip</th>
+                  <th>Net Profit</th>
+                  <th>ROI %</th>
+                  <th>Exit Reason</th>
+                </tr>
+              </thead>
+              <tbody id="history-ledger-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Market Comparison Detail Modal -->
+  <div id="market-detail-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-market-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <span id="modal-category-badge" class="category-tag">Economics</span>
+          <h2 id="modal-market-title" class="modal-title">Market Arbitrage Deep Dive</h2>
+          <span id="modal-market-id" class="modal-id">PAIR-ID</span>
+        </div>
+        <button id="close-detail-modal-btn" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="orderbook-comparison">
+          <div class="ob-panel venue-kalshi">
+            <div class="ob-header">
+              <span class="venue-badge kalshi">KALSHI</span>
+              <span id="modal-ob-kalshi-market">Kalshi L2 Top</span>
+            </div>
+            <div class="ob-levels">
+              <div class="ob-row ask">
+                <span class="ob-label">Ask (Buy YES)</span>
+                <span id="modal-kalshi-ask" class="ob-price">$0.45</span>
+                <span id="modal-kalshi-ask-vol" class="ob-vol">420 contracts</span>
+              </div>
+              <div class="ob-row bid">
+                <span class="ob-label">Bid (Sell YES)</span>
+                <span id="modal-kalshi-bid" class="ob-price">$0.44</span>
+                <span id="modal-kalshi-bid-vol" class="ob-vol">420 contracts</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ob-panel venue-poly">
+            <div class="ob-header">
+              <span class="venue-badge poly">POLYMARKET</span>
+              <span id="modal-ob-poly-market">Polymarket L2 Top</span>
+            </div>
+            <div class="ob-levels">
+              <div class="ob-row ask">
+                <span class="ob-label">Ask (Buy NO)</span>
+                <span id="modal-poly-ask" class="ob-price">$0.49</span>
+                <span id="modal-poly-ask-vol" class="ob-vol">650 contracts</span>
+              </div>
+              <div class="ob-row bid">
+                <span class="ob-label">Bid (Sell NO)</span>
+                <span id="modal-poly-bid" class="ob-price">$0.48</span>
+                <span id="modal-poly-bid-vol" class="ob-vol">650 contracts</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settlement-checklist">
+          <h4 class="checklist-title">Settlement Rule Verification</h4>
+          <p id="modal-rules-reason" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Verified identical resolution criteria.</p>
+          <ul class="checklist-items">
+            <li><span class="check-icon">✓</span> <strong>Rule Verdict:</strong> <span id="modal-rules-verdict">same</span></li>
+            <li><span class="check-icon">✓</span> <strong>L2 Depth Guard:</strong> Position size capped by cumulative depth and 45% equity limit.</li>
+          </ul>
+        </div>
+
+        <div class="modal-footer-actions">
+          <button id="modal-open-calc-btn" class="action-btn primary">Calculate Sizing</button>
+          <button id="modal-exec-bot-btn" class="action-btn success">Simulate Paper Trade</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-stack"></div>
+  <script src="app.js"></script>
+</body>
+</html>
